@@ -89,7 +89,7 @@ is_running() {
   _pid="$(cat "$PIDF" 2>/dev/null)"
   [ -n "$_pid" ] || return 1
   kill -0 "$_pid" 2>/dev/null || return 1
-  ps -p "$_pid" -o command= 2>/dev/null | grep -q "cf-probe"
+  ps -p "$_pid" -o command= 2>/dev/null | grep "cf-probe" | grep -qv "defunct"
 }
 
 start_probe() {
@@ -98,7 +98,8 @@ start_probe() {
   if is_running; then ok "已在运行 (PID $(cat "$PIDF"))"; return 0; fi
   cd "$DIR" || die "无法进入 $DIR"
   : >>"$LOG"
-  nohup "$BIN" run -config "$CONF" >>"$LOG" 2>&1 </dev/null &
+  mkdir -p "$DIR/tmp"
+  TMPDIR="$DIR/tmp" nohup "$BIN" run -config "$CONF" >>"$LOG" 2>&1 </dev/null &
   echo $! >"$PIDF"
   sleep 3
   if is_running; then
@@ -134,13 +135,14 @@ CONF="$CONF"
 LOG="$LOG"
 PIDF="$PIDF"
 PID="\$(cat "\$PIDF" 2>/dev/null)"
-if [ -n "\$PID" ] && kill -0 "\$PID" 2>/dev/null && ps -p "\$PID" -o command= 2>/dev/null | grep -q cf-probe; then
+if [ -n "\$PID" ] && kill -0 "\$PID" 2>/dev/null && ps -p "\$PID" -o command= 2>/dev/null | grep cf-probe | grep -qv defunct; then
   SZ="\$(wc -c <"\$LOG" 2>/dev/null | tr -d ' ')"
   [ "\${SZ:-0}" -gt 5242880 ] && : >"\$LOG"
   exit 0
 fi
 cd "\$DIR" || exit 1
-nohup "\$BIN" run -config "\$CONF" >>"\$LOG" 2>&1 </dev/null &
+mkdir -p "\$DIR/tmp"
+TMPDIR="\$DIR/tmp" nohup "\$BIN" run -config "\$CONF" >>"\$LOG" 2>&1 </dev/null &
 echo \$! >"\$PIDF"
 EOF
   chmod 700 "$KEEP"
@@ -278,7 +280,6 @@ do_uninstall() {
   del_cron
   case "$DIR" in ""|"/"|"$HOME"|"$HOME/") die "目录异常，拒绝删除: $DIR" ;; esac
   rm -rf "$DIR"
-  rm -f /tmp/cf-probe.lock 2>/dev/null || true
   ok "已卸载"
 }
 
